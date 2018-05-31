@@ -5,7 +5,7 @@
 // #define ROMB         // use rhomb cells aligned with the array
 #define ASENS        // enable angular sensitivity
 #define RAND         // disable for deterministic results
-#define FILE_OUT
+#define CAMERA
 // #define TILT         // enable tilted ice layers
 #define ANIZ         // enable anisotropic ice
 #define HOLE         // enable direct hole ice simulation

@@ -367,6 +367,7 @@ namespace xppc{
 	
 	void print();
 	void closeFile();
+	void setNameWithGeometry(int x, int y, int z);
 	
 	void kernel(unsigned int num){
 		#ifdef XCPU
@@ -384,7 +385,9 @@ namespace xppc{
 				i->kernel_i();
 			}
 #endif
+#ifndef CAMERA
 			cerr<<"photons: "<<old<<"  hits: "<<d.hidx<<endl;
+#endif
 		}
 		
 #ifndef XCPU
@@ -541,14 +544,18 @@ namespace xppc{
 	
 	void flasher(int str, int dom, unsigned long long num, int itr){
 		flini(str, dom);
-		
+#ifdef CAMERA
+		setNameWithGeometry(x_diff, y_diff, z_diff);
+#endif
 		for(int j=0; j<max(1, itr); j++){
 			flone(num);
 			if(itr>0) printf("\n");
 		}
 		
 		fin();
+#ifdef CAMERA
 		closeFile();
+#endif
 	}
 	
 	#ifdef XCPU

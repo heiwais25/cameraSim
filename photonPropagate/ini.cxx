@@ -18,7 +18,7 @@ int xr=1;
 struct OM:DOM,ikey{};
 vector<OM> i3oms;
 
-
+float x_diff, y_diff, z_diff;
 
 map<ikey, float> hvs;
 map<ikey, pair<float, int> > rdes;
@@ -177,6 +177,17 @@ struct ini{
                 inFile.close();
             }
         }
+
+#ifdef CAMERA
+        // Get the distance between two DOM(only in the case of camera analysis)
+        {
+            OM om_0 = i3oms[0], om_1 = i3oms[1];
+            x_diff = abs(om_0.r[0] - om_1.r[0]);
+            y_diff = abs(om_0.r[1] - om_1.r[1]);
+            z_diff = abs(om_0.r[2] - om_1.r[2]);
+        }
+
+#endif
 
         // Get the efficiency of DOM
         {

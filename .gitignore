@@ -3,3 +3,5 @@ test_log
 .vscode/c_cpp_properties.json
 .vscode/sftp.json
 .vscode
+*.ps1
+*-checkpoint.ipynb

@@ -332,8 +332,13 @@ int hcmp(const void *a, const void *b){
 static int eventCount = 0; 
 static int fileCount = 0;
 ofstream outFile;
+// static int x_diff = 0, y_diff = 0, z_diff = 0;
 
-
+void setNameWithGeometry(int x, int y, int z){
+  // x_diff = x;
+  // y_diff = y;
+  // z_diff = z;
+}
 
 
 void closeFile(){
@@ -347,8 +352,14 @@ void closeFile(){
 
 void openFile(){
   if(!outFile.is_open()){
+    // Get file directory
+    // string dir("");
+    // char * env = getenv("PPCTABLESDIR");
+    // if(env!=NULL) dir=string(env)+"/";
     ostringstream oss;
-    oss << "./output/ppc_log_" << fileCount << ".dat";
+    oss.precision(2);
+    oss << fixed;
+    oss << "../dats/ppc_log_x_" << x_diff << "_y_" << y_diff << "_z_" << z_diff << "_" << fileCount << ".dat";
     cout << oss.str() << endl;
     outFile.open(oss.str().c_str(), ios::out | ios::binary);
     fileCount++;
@@ -363,7 +374,7 @@ void openFile(){
 void writeHitInfo(const name & n, const hit & h){
   if(!outFile.is_open()){
     cout << "File needs to be open first" << endl;
-    exit(2);
+    exit(1);
   }
   float str = n.str, dom = n.dom; 
   outFile.write((char *)&str,sizeof(float));
@@ -383,7 +394,7 @@ void writeHitInfo(const name & n, const hit & h){
 }
 
 void print(){
-#ifdef FILE_OUT
+#ifdef CAMERA
   if(!outFile.is_open()){
     openFile();
   }
@@ -454,7 +465,7 @@ void print(){
 #endif
 #else
 #ifdef PDIR
-#ifdef FILE_OUT
+#ifdef CAMERA
      writeHitInfo(n, h);
 #else
       printf("HIT %d %d %f %f %f %f %f %f\n", n.str, n.dom, h.t, h.z, h.pth, h.pph, h.dth, h.dph);
