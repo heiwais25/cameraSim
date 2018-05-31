@@ -659,7 +659,7 @@ int main(int arg_c, char *arg_a[]){
 		}
 		if(arg_c>4) device=atoi(arg_a[4]);
 		initialize();
-		listDevices();
+		// listDevices();
 		choose(device);
 		fprintf(stderr, "Running flasher simulation on device %d\n", device);
 		flasher(ledStr, ledDom, num, itr);

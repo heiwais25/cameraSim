@@ -49,7 +49,7 @@ def calculate_inter_angle_to_camera(camera_normal_vec, photon_dir_vec):
 
 
 def get_sensor_filter(photon_pos_sphe, photon_momentum_sphe, camera_pos_sphe, 
-                      radius=0.16510, camera_distance=0.02, camera_lens_rad = 0.005, opening_angle = np.pi * 3 / 2):
+                      radius=0.16510, camera_distance=0.02, camera_lens_rad = 0.005, opening_angle = np.pi * 2 / 3):
     """From the boundary, check photon can arrive in lens or not. There are main two parts
     1. Check lens geometry and photon track
     2. Compare opening angle
@@ -100,3 +100,96 @@ def get_sensor_filter(photon_pos_sphe, photon_momentum_sphe, camera_pos_sphe,
     sensor_filter = is_arrive_sensor * (inter_angle < opening_angle / 2)
     
     return sensor_filter
+
+
+# Calculate refractive index of ice which depends on the wavelength
+def refractive_index_ice(wv):
+    """Return refractive index of ice at certain wavelength
+    [https://wiki.icecube.wisc.edu/index.php/Refractive_index_of_ice]
+
+    Args:
+        wv (float) : wavelength of photon in [nm]
+    
+    Returns:
+        (float) : refractive index
+    """
+    wv_um = wv / 1000
+    return 1.55749 - 1.57988 * wv_um + 3.99993 * wv_um ** 2 - 4.68271 * wv_um ** 3 + 2.093354 * wv_um ** 4
+
+
+def calc_refracted_dir(s1, N, n1, n2):
+    """Calculate refracted direction using 3 dimensional Snell's law
+    [http://www.starkeffects.com/snells-law-vector.shtml]
+    
+    Args:
+        s1 (np.array([x, y, z])) : directional vector of incident vector
+        N (np.array([x, y, z])) : normal vector on the surface
+        n1 (float) : refractive index of incident place
+        n2 (float) : refractive index of refracted place
+    
+    Returns:
+        s2 (np.array([x, y, z])) : directional vector of refracted light
+    """
+    n = n1 / n2
+    cross = np.cross(N,s1)
+    # print(cross)
+    # print(n**2 * np.sum(cross * cross, axis=1))
+    s2 = n * np.cross(N, -cross) - (N.T * np.sqrt(1 - n**2 * np.sum(cross * cross, axis=1))).T
+    return s2
+
+
+def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, n0, r0 = 0.16510, d0 = 0.0127, n1 = 1.47, n2 = 1.):
+    """Using Snell's law, pass two steps (ice -> pressure vessel, pressure vessel -> inner DOM air)
+    [http://www.starkeffects.com/snells-law-vector.shtml]
+    
+    Args:
+        photon_pos_sphe(np.array([phi, theta])) : unit vector of photon arrival position in spherical coordinate
+        photon_momentum_sphe(np.array([phi, theta])) : unit vector of photon momentum in spherical coordinate
+        n0 (float) : refractive index of ice
+        r0 (float) : DOM radius(pressure vessel)
+        d0 (float) : thickness of pressue vessel
+        n1 (float) : refractive index of pressure vessel
+        n2 (float) : refractiev index of air(inside of vessel)
+    
+    """
+    r1 = r0 - d0
+    
+    # step 1 (ice -> vessel)
+    s1 = sphe_to_cart(photon_momentum_sphe) * -1 # inicident angle
+    N = sphe_to_cart(photon_pos_sphe)
+    s2 = calc_refracted_dir(s1, N, n0, n1)
+    
+    # Move from outer boundary to inner boundary inside of vessel 
+    # It is just solving simultaneous equations of sphere(inner vessel) and refracted photon track
+    p0 = r0 * sphe_to_cart(photon_pos_sphe)
+    A = np.sum(s2 ** 2, axis=1) # alpha ^ 2 + beta ^2 + gamma ^2 (It is ~ 1 : unit vector)
+    B = 2 * np.sum(s2 * p0, axis = 1) # 2 * (alpha * x_0 + beta * y_0 + gamma * z_0)
+    C = np.sum(p0 ** 2, axis=1) - r1 ** 2 # x_0 ^ 2 + y_0 ^ 2 + z_0 ^ 2 - r_1 ^ 2
+    t0 = (-B + np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
+    t1 = (-B - np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
+    
+    # p1 : position vector on the inner vessel, p0 : position vector on the outer vessel
+    p1_0 = (s2.T * t0).T   + p0
+    p1_1 = (s2.T * t1).T   + p0
+    
+    # Find the closest point to the p0
+    l0 = np.linalg.norm(p1_0 - p0, axis=1) 
+    l1 = np.linalg.norm(p1_1 - p0, axis=1)
+    if np.sum(l0 < l1) == 0: # l0 is longer than l1
+        p1 = p1_1
+    else:
+        p1 = p1_0
+        
+    # Step 2 (vessel -> DOM interior)
+    s1 = s2
+    N = p1 / r1
+    s2 = calc_refracted_dir(s1, N, n1, n2)
+
+    # Because there are some photons cannot pass the vessel, s2 includes np.nan. We need to filter that value
+    nan_filter = ~np.isnan(s2)
+    
+    # With nan filter, calculate momentum and position of photon after passing the vessel
+    new_momentum_sphe = cart_to_sphe(-s2[nan_filter].reshape(-1, 3))
+    new_pos_sphe = cart_to_sphe(N[nan_filter].reshape(-1, 3))
+    
+    return new_momentum_sphe, new_pos_sphe

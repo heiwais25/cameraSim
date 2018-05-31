@@ -18,7 +18,7 @@ int xr=1;
 struct OM:DOM,ikey{};
 vector<OM> i3oms;
 
-float x_diff, y_diff, z_diff;
+float x_diff, y_diff, z_diff, camera_z = -1;
 
 map<ikey, float> hvs;
 map<ikey, pair<float, int> > rdes;
@@ -185,8 +185,8 @@ struct ini{
             x_diff = abs(om_0.r[0] - om_1.r[0]);
             y_diff = abs(om_0.r[1] - om_1.r[1]);
             z_diff = abs(om_0.r[2] - om_1.r[2]);
+            camera_z = abs(om_1.r[2] - zoff);
         }
-
 #endif
 
         // Get the efficiency of DOM
@@ -698,7 +698,9 @@ struct ini{
                 }
             }
         }
-
+        // For print just one time of scatt and absorp length
+        int is_print = false;
+        
         for(int n=0; n<WNUM; n++){
             float p=(n+0.5f)/WNUM;
             int m=0; while(wx[++m]<p);
@@ -711,17 +713,19 @@ struct ini{
             float l_a=pow(wva/wv0, -a);
             float l_k=pow(wva, -k);
             float ABl=A*exp(-B/wva);
-
             ices & w = z.w[n];
-
             for(int i=0; i<size; i++){
-            int j=size-1-i;
-            float bbl=bble>0?dp[j]<bblz&&dp[j]<bbly?bble*(1-dp[j]/bblz)*(1-dp[j]/bbly):0:0;
-            float sca=(bbl+be[j]*l_a)/(1-d.g), abs=(D*ba[j]+E)*l_k+ABl*(1+0.01*td[j]);
-            if(sca>0 && abs>0) w.z[i].sca=sca, w.z[i].abs=abs;
-            else{ cerr << "Invalid value of ice parameter, cannot proceed" << endl; exit(1); }
-            }
-
+                int j=size-1-i;
+                float bbl=bble>0?dp[j]<bblz&&dp[j]<bbly?bble*(1-dp[j]/bblz)*(1-dp[j]/bbly):0:0;
+                float sca=(bbl+be[j]*l_a)/(1-d.g), abs=(D*ba[j]+E)*l_k+ABl*(1+0.01*td[j]);
+                if(sca>0 && abs>0) w.z[i].sca=sca, w.z[i].abs=abs;
+                else{ cerr << "Invalid value of ice parameter, cannot proceed" << endl; exit(1); }
+                if(!is_print &&  camera_z < dp[j] + 5 && camera_z > dp[j] - 5){
+                    is_print = true;
+                    cout << "Scattering length : " << (1 / (sca * (1 - d.g))) << "m" << endl;
+                    cout << "Absorption length : " << 1 / abs << "m" << endl;
+                }
+            }   
             float wv=wva*1.e-3;
             float wv2=wv*wv;
             float wv3=wv*wv2;
