@@ -5,3 +5,4 @@ test_log
 .vscode
 *.ps1
 *-checkpoint.ipynb
+output/
