@@ -19,7 +19,7 @@ struct OM:DOM,ikey{};
 vector<OM> i3oms;
 
 float x_diff, y_diff, z_diff, camera_z = -1;
-int photonOrder = 0;
+int photonOrder = 0, iterNum = 0;
 
 map<ikey, float> hvs;
 map<ikey, pair<float, int> > rdes;

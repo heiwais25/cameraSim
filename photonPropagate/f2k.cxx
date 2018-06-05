@@ -359,7 +359,7 @@ void openFile(){
     ostringstream oss;
     oss.precision(2);
     oss << fixed;
-    oss << "../dats/ppc_log_x_" << x_diff << "_y_" << y_diff << "_z_" << z_diff << "_order_" << photonOrder << "_" << fileCount << ".dat";
+    oss << "../dats/ppc_log_x_" << x_diff << "_y_" << y_diff << "_z_" << z_diff << "_order_" << photonOrder << "_iter_" << iterNum << "_" << fileCount << ".dat";
     cout << oss.str() << endl;
     outFile.open(oss.str().c_str(), ios::out | ios::binary);
     fileCount++;

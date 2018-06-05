@@ -549,13 +549,14 @@ namespace xppc{
 		setNameWithGeometry(x_diff, y_diff, z_diff);
 #endif
 		for(int j=0; j<max(1, itr); j++){
+			iterNum = j;
 			flone(num);
-			if(itr>0) printf("\n");
+			// if(itr>0) printf("\n");
+			closeFile();
 		}
 		
 		fin();
 #ifdef CAMERA
-		closeFile();
 #endif
 	}
 
