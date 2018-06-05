@@ -15,7 +15,8 @@ new_geo = copy.deepcopy(orig_geo)
 
 # Range to change coordinate(In this case, we will change x)
 order = 10
-dx = np.arange(-10, 11, 1)
+dx = np.arange(-5, 5.1, 0.5)
+# dx = np.array([5, 10, 15, 20])
 for i in range(len(dx)):
     wf = open("photonPropagate/datafiles/geo-f2k", 'w', encoding='utf-8', newline='')
     wr = csv.writer(wf, delimiter='\t')
@@ -23,7 +24,7 @@ for i in range(len(dx)):
     for line in new_geo:
         wr.writerow(line)
     wf.close()
-    subprocess.call('cd photonPropagate; ./ppc 1 1 %d' % pow(10,order), shell=True)
+    subprocess.call('cd photonPropagate;WFLA=405 ./ppc 1 1 %d' % pow(10,order), shell=True)
 
 # Recover the file using orig_geo
 wf = open("photonPropagate/datafiles/geo-f2k", 'w', encoding='utf-8', newline='')

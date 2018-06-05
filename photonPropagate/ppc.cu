@@ -1,6 +1,7 @@
 #include <map>
 #include <deque>
 #include <vector>
+#include <cmath>
 #include <sstream>
 #include <fstream>
 #include <iostream>
@@ -557,6 +558,10 @@ namespace xppc{
 		closeFile();
 #endif
 	}
+
+	void setOrder(int order){
+		photonOrder = order;
+	}
 	
 	#ifdef XCPU
 	void start(){}
@@ -658,8 +663,11 @@ int main(int arg_c, char *arg_a[]){
 			if(sub!=NULL) itr=(int) atof(++sub);
 		}
 		if(arg_c>4) device=atoi(arg_a[4]);
+		int order = log10(num);
+		// cout << order << endl;
 		initialize();
 		// listDevices();
+		setOrder(order);
 		choose(device);
 		fprintf(stderr, "Running flasher simulation on device %d\n", device);
 		flasher(ledStr, ledDom, num, itr);

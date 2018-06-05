@@ -3,7 +3,7 @@
 
 #define OFLA         // omit the flasher DOM
 // #define ROMB         // use rhomb cells aligned with the array
-#define ASENS        // enable angular sensitivity
+// #define ASENS        // enable angular sensitivity
 #define RAND         // disable for deterministic results
 #define CAMERA
 // #define TILT         // enable tilted ice layers

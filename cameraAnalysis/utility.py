@@ -1,7 +1,64 @@
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
+import os.path
 from matplotlib.colors import LogNorm
+
+class Camera:
+    """
+        Define camera position in spherical coordinates and lens information like
+        radius and FOV
+    """
+    def __init__(self, pos_sphe, pos_distance, lens_rad, FOV):
+        """Init
+
+        Args:
+            pos_sphe (np.array([phi, theta])) : camera position in spherical coordinate
+            pos_distance (float) : how much is apart from the DOM boundary
+            lens_rad (float) : lens radius 
+            FOV (float) : camera oepning angle [deg]
+        """
+        self.pos_sphe = np.array(pos_sphe)
+        self.pos_distance = pos_distance
+        self.lens_rad = lens_rad
+        self.FOV = FOV
+
+class DOM:
+    """Define DOM parameters (DOM includes camera, not LED)
+
+    """
+    def __init__(self, radius, thickness, vessel_index, inner_index, pos_diff):
+        """Init
+
+        Args:
+            radius (float) : radius of the DOM [m]
+            thickness (float) : thickness of the vessel which covers the DOM [m]
+            vessel_index (float) : refractive index of vessel
+            inner_index (float) : refractive index of inner DOM
+            pos_diff (np.array([x,y,z])) : difference of distance between 
+                                LED DOM and camera DOM in cartesian coordinates [m]
+        """
+        self.radius = radius
+        self.thickness = thickness
+        self.vessel_index = vessel_index
+        self.inner_index = inner_index
+        self.pos_diff = pos_diff
+
+class Ice:
+    """Define ice properties
+
+    """
+    def __init__(self, sca_length, abs_length, index):
+        """Init
+
+        Args:
+            sca_length (float) : sca_lengthttering length of ice [m]
+            abs_length (float) : absorption length of ice [m]
+            index (float) : refractiev index of ice (it depends on the wavelength)
+        """
+        self.sca_length = sca_length
+        self.abs_length = abs_length
+        self.index = index
 
 
 def sphe_to_cart(sphe_coord):
@@ -211,8 +268,11 @@ def get_total_hist2d(file_name, num_files,
                      wv = 405, 
                      camera_pos_sphe = np.array([0, np.pi/2]), 
                      camera_lens_rad = 0.005,
+                     camera_distance = 0.02,
+                     FOV = 120,
                      filter_lens = True,
                      show_position = False, 
+                     print_num = False,
                      src_dir = "../dats/"):
     """Because the large photon data like more than 10^12 is stored in separately. So, we need to merge splitted data.
     It will be used for the purpose of comparing histogram.
@@ -243,6 +303,8 @@ def get_total_hist2d(file_name, num_files,
     for i in range(num_files):
         # Read photon log
         this_file_name = file_name.replace('0.dat', '%d.dat' % i)
+        if not os.path.isfile(src_dir + this_file_name):
+            break
         data = np.fromfile(src_dir + this_file_name, dtype='<f4')
         photon_log = data.reshape(-1, 8)
         momentum= photon_log[:,5:3:-1]
@@ -257,13 +319,15 @@ def get_total_hist2d(file_name, num_files,
             # Get sensor area filter
             refracted_filter = get_sensor_filter(direction, momentum, camera_pos_sphe, 
                                                     camera_lens_rad=camera_lens_rad, 
-                                                    radius=radius)
+                                                    camera_distance=camera_distance,
+                                                    radius=radius,
+                                                    FOV=FOV)
             
             # Apply the filter
             momentum = momentum[refracted_filter]
             direction = direction[refracted_filter]
-
-        print('%dth file : %d photon arrive in lens' %(i+1, len(momentum)))
+        if print_num:
+            print('%dth file : %d photon arrive in lens' %(i+1, len(momentum)))
 
         if not show_position:
             data = momentum
@@ -285,8 +349,8 @@ def get_total_hist2d(file_name, num_files,
             H = H0
         else:
             H += H0
-
-    print('The number of total photon on the lens : %d' %(np.sum(H)))
+    if print_num:
+        print('The number of total photon on the lens : %d' %(np.sum(H)))
     return H, x_edges, y_edges
 
 
