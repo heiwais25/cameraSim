@@ -1,4 +1,5 @@
 import itertools
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import os.path
@@ -61,6 +62,12 @@ class Ice:
         self.index = index
 
 
+def dot_each_row(x, y):
+    '''Do dot product in each row
+
+    '''
+    return np.einsum('ij,ij->i', x, y)
+
 def sphe_to_cart(sphe_coord):
     """Change spherical coordinates to spherical coordinate
     
@@ -74,7 +81,8 @@ def sphe_to_cart(sphe_coord):
         phi, theta = sphe_coord
     else:
         phi, theta = sphe_coord[:, 0], sphe_coord[:, 1]
-    return np.array([np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)]).T
+    sin_theta = np.sin(theta)
+    return np.array([sin_theta * np.cos(phi), sin_theta * np.sin(phi), np.cos(theta)]).T
 
 def cart_to_sphe(cart_coord):
     """Change cartesian coordinates to spherical coordinate
@@ -132,8 +140,8 @@ def get_sensor_filter(photon_pos_sphe, photon_momentum_sphe, camera_pos_sphe,
     
     # For the linear equation of incident photon
     # l : (x - x_0) / alpha = (y - y_0) / beta = (z - z_0) / gamma = t
-    arrival_pos_cart = radius * sphe_to_cart(photon_pos_sphe) # (x_0, y_0, z_0)
-    arrival_dir_vec = -sphe_to_cart(photon_momentum_sphe) # (alpha, beta, gamma)
+    arrival_pos_cart = radius * sphe_to_cart(photon_pos_sphe)
+    arrival_dir_vec = -sphe_to_cart(photon_momentum_sphe)
     
     # Camera position for the plane equation
     # S : a(x - x_c) + b(y - y_c) + c(z - z_c) = 0
@@ -143,10 +151,11 @@ def get_sensor_filter(photon_pos_sphe, photon_momentum_sphe, camera_pos_sphe,
     # Find t calculated in linear in plane equation
     # solve simultaneous equations between l and S
     t = -(np.sum(camera_normal_vec * (arrival_pos_cart - camera_pos_cart), axis=1)) / np.sum(camera_normal_vec * arrival_dir_vec, axis=1)
-    
+
     # Calculate intersection on the plane(S) using t
     # x_1 = alpha * t + x_0, y_1 = beta * t + y_0, z_1 = gamma * t + z_0
-    intersect_cart = (t * arrival_dir_vec.T).T + arrival_pos_cart # (x_1, y_1, z_1)
+    intersect_cart = (t[:,np.newaxis] * arrival_dir_vec) + arrival_pos_cart # (x_1, y_1, z_1)
+    
     
     # Calculate distance how much far from camera centor point
     # np.sqrt((x_1 - x_c) ** 2 + (y_1 - y_c) ** 2 + (z_1 - z_c) ** 2)
@@ -194,10 +203,8 @@ def calc_refracted_dir(s1, N, n1, n2):
     """
     n = n1 / n2
     cross = np.cross(N,s1)
-    # print(cross)
-    # print(n**2 * np.sum(cross * cross, axis=1))
-    s2 = n * np.cross(N, np.cross(-N, s1)) - (N.T * np.sqrt(1 - n**2 * np.sum(cross * cross, axis=1))).T
-    return s2
+    return n * (-N*np.einsum('ij,ij->i',N,s1)[:,np.newaxis] + s1*np.einsum('ij,ij->i',N,N)[:,np.newaxis]) - \
+                    N * np.sqrt(1 - n**2 * np.einsum('ij,ij->i', cross, cross))[:,np.newaxis]
 
 
 def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, n0, r0 = 0.16510, d0 = 0.0127, n1 = 1.47, n2 = 1.):
@@ -213,53 +220,55 @@ def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, n0, r0 = 0.16510
         n1 (float) : refractive index of pressure vessel
         n2 (float) : refractiev index of air(inside of vessel)
     
+    Returns:
     """
-    r1 = r0 - d0
     
+    r1 = r0 - d0
+    photon_pos_cart = sphe_to_cart(photon_pos_sphe)
+  
     # step 1 (ice -> vessel)
     s1 = -1 * sphe_to_cart(photon_momentum_sphe)  # inicident angle
-    N = sphe_to_cart(photon_pos_sphe)
+    N = photon_pos_cart
     s2 = calc_refracted_dir(s1, N, n0, n1)
-    
-    # print(s1, s2)
 
     # Move from outer boundary to inner boundary inside of vessel 
     # It is just solving simultaneous equations of sphere(inner vessel) and refracted photon track
-    p0 = r0 * sphe_to_cart(photon_pos_sphe)
-    A = np.sum(s2 ** 2, axis=1) # alpha ^ 2 + beta ^2 + gamma ^2 (It is ~ 1 : unit vector)
-    B = 2 * np.sum(s2 * p0, axis = 1) # 2 * (alpha * x_0 + beta * y_0 + gamma * z_0)
-    C = np.sum(p0 ** 2, axis=1) - r1 ** 2 # x_0 ^ 2 + y_0 ^ 2 + z_0 ^ 2 - r_1 ^ 2
-    t0 = (-B + np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
-    t1 = (-B - np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
-    
-    # p1 : position vector on the inner vessel, p0 : position vector on the outer vessel
-    p1_0 = (s2.T * t0).T   + p0
-    p1_1 = (s2.T * t1).T   + p0
-    
+    p0 = r0 * photon_pos_cart
+    A = dot_each_row(s2,s2) # alpha ^ 2 + beta ^2 + gamma ^2 (It is ~ 1 : unit vector)
+    B = 2 * dot_each_row(s2, p0) # 2 * (alpha * x_0 + beta * y_0 + gamma * z_0)
+    C = dot_each_row(p0, p0) - r1 ** 2 # x_0 ^ 2 + y_0 ^ 2 + z_0 ^ 2 - r_1 ^ 2
+
+    # Find the close point by comparing first elemnt 
+    t0 = (-B[0] + np.sqrt(B[0] ** 2 - 4 * A[0] * C[0])) / (2 * A[0])
+    t1 = (-B[0] - np.sqrt(B[0] ** 2 - 4 * A[0] * C[0])) / (2 * A[0])
+       
+    p1_0 = s2[0] * t0   + p0[0]
+    p1_1 = s2[0] * t1   + p0[0]
+
     # Find the closest point to the p0
-    l0 = np.linalg.norm(p1_0 - p0, axis=1) 
-    l1 = np.linalg.norm(p1_1 - p0, axis=1)
-    if np.sum(l0 < l1) == 0: # l0 is longer than l1
-        p1 = p1_1
+    l0 = np.linalg.norm(p1_0 - p0[0]) 
+    l1 = np.linalg.norm(p1_1 - p0[0])
+    
+    if l0 < l1: # l0 is longer than l1
+        t = (-B + np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
     else:
-        p1 = p1_0
-        
+        t = (-B - np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
+
+    p1 = s2 * t[:,np.newaxis] + p0
+
     # Step 2 (vessel -> DOM interior)
     s1 = s2
     N = p1 / r1
     s2 = calc_refracted_dir(s1, N, n1, n2)
 
     # Because there are some photons cannot pass the vessel, s2 includes np.nan. We need to filter that value
-    nan_filter = ~np.isnan(s2)
-    
     # With nan filter, calculate momentum and position of photon after passing the vessel
-    new_momentum_sphe = cart_to_sphe(-s2[nan_filter].reshape(-1, 3))
-    new_pos_sphe = cart_to_sphe(N[nan_filter].reshape(-1, 3))
+    nan_filter = ~np.isnan(s2[:,0])
 
-    return new_momentum_sphe, new_pos_sphe
+    return cart_to_sphe(-s2[nan_filter]), cart_to_sphe(N[nan_filter])
 
 
-def get_total_hist2d(file_name, num_files, 
+def get_total_hist2d(file_name, num_files, iterations=0,
                      x_edges = np.linspace(-np.pi, np.pi, 100), 
                      y_edges = np.linspace(0, np.pi, 100),
                      bins = [],
@@ -273,7 +282,9 @@ def get_total_hist2d(file_name, num_files,
                      filter_lens = True,
                      show_position = False, 
                      print_num = False,
-                     src_dir = "../dats/"):
+                     use_stored_data = False,
+                     src_raw_dir = "../dats/",
+                     src_stored_dir = ""):
     """Because the large photon data like more than 10^12 is stored in separately. So, we need to merge splitted data.
     It will be used for the purpose of comparing histogram.
     
@@ -289,7 +300,10 @@ def get_total_hist2d(file_name, num_files,
         camera_pos_sphe(np.array([phi, theta])) : camera position vector from the center of DOM
         camera_lens_rad(float) : radius of camera lens
         filter_lens(bool) : If it is true, calculate histogram for photons which are on the lens. Otherwise just collect all momentum info
-        
+        use_stored_data(bool) : Due to large computational cost and storage, we can calculate refraction first and use that. It is usually stored in the
+                            directory "refraction/" inside of src_dir. 
+                            
+                            The format is momentum(phi, theta), position(phi, theta)    
 
     Returns:
         H : Total histogram of photon on the sensor
@@ -299,40 +313,55 @@ def get_total_hist2d(file_name, num_files,
     # Get photon log from input file name
     H = []
     momentum = []
-    direction = []
+    position = []
+    ice_index = refractive_index_ice(wv)
     for i in range(num_files):
-        # Read photon log
-        this_file_name = file_name.replace('0.dat', '%d.dat' % i)
-        if not os.path.isfile(src_dir + this_file_name):
-            break
-        data = np.fromfile(src_dir + this_file_name, dtype='<f4')
-        photon_log = data.reshape(-1, 8)
-        momentum= photon_log[:,5:3:-1]
-        direction = photon_log[:,7:5:-1]
-        radius = r0
-        if filter_lens:
-            # Apply refraction on the pressure vessel
-            if d0 != 0:
-                momentum, direction = pass_pressure_vessel(direction, momentum, refractive_index_ice(wv))
-                radius -= d0
-
-            # Get sensor area filter
-            refracted_filter = get_sensor_filter(direction, momentum, camera_pos_sphe, 
-                                                    camera_lens_rad=camera_lens_rad, 
-                                                    camera_distance=camera_distance,
-                                                    radius=radius,
-                                                    FOV=FOV)
+        if use_stored_data:
+            # Use precalculated refraction data
+            this_file_name = file_name.replace('0.dat', '%d.npz' % i).replace('ppc_log', 'ppc_log_refraction')
+            if len(src_stored_dir) == 0:
+                src_stored_dir = src_raw_dir + "refraction/"
+            if not os.path.isfile(src_stored_dir + this_file_name):
+                break
+            refraction_data = np.load(src_stored_dir + this_file_name)
+            momentum = refraction_data["momentum"]
+            position = refraction_data["position"]
+            radius = r0 - d0
             
-            # Apply the filter
-            momentum = momentum[refracted_filter]
-            direction = direction[refracted_filter]
+        else:
+            # Read photon log
+            this_file_name = file_name.replace('0.dat', '%d.dat' % i)
+            if not os.path.isfile(src_raw_dir + this_file_name):
+                break
+            data = np.fromfile(src_raw_dir + this_file_name, dtype='<f4')
+            photon_log = data.reshape(-1, 8)
+            momentum= photon_log[:,5:3:-1]
+            position = photon_log[:,7:5:-1]
+            radius = r0
+            if filter_lens:
+                # Apply refraction on the pressure vessel
+                if d0 != 0:
+                    momentum, position = pass_pressure_vessel(position, momentum, ice_index)
+                    radius -= d0
+
+        # Get sensor area filter
+        refracted_filter = get_sensor_filter(position, momentum, camera_pos_sphe, 
+                                                camera_lens_rad=camera_lens_rad, 
+                                                camera_distance=camera_distance,
+                                                radius=radius,
+                                                FOV=FOV)
+            
+        # Apply the filter
+        momentum = momentum[refracted_filter]
+        position = position[refracted_filter]
+        # print(momentum)
         if print_num:
             print('%dth file : %d photon arrive in lens' %(i+1, len(momentum)))
 
         if not show_position:
             data = momentum
         else:
-            data = direction
+            data = position
 
 
         # Put the data into histogram
@@ -345,6 +374,8 @@ def get_total_hist2d(file_name, num_files,
         else:
             raise Exception('Invalid bins error')
         
+
+
         if i == 0:
             H = H0
         else:
