@@ -207,29 +207,38 @@ def calc_refracted_dir(s1, N, n1, n2):
                     N * np.sqrt(1 - n**2 * np.einsum('ij,ij->i', cross, cross))[:,np.newaxis]
 
 
-def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, n0, r0 = 0.16510, d0 = 0.0127, n1 = 1.47, n2 = 1.):
+# def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, n0, r0 = 0.16510, d0 = 0.0127, n1 = 1.47, n2 = 1.):
+def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, 
+                    dom = DOM(radius=0.16510, thickness=0.0127, vessel_index=1.47, inner_index=1, pos_diff=[30,0,0]), 
+                    ice = Ice(sca_length=42.53, abs_length=147.811, index=refractive_index_ice(405))):
+    
     """Using Snell's law, pass two steps (ice -> pressure vessel, pressure vessel -> inner DOM air)
     [http://www.starkeffects.com/snells-law-vector.shtml]
     
     Args:
         photon_pos_sphe(np.array([phi, theta])) : unit vector of photon arrival position in spherical coordinate
         photon_momentum_sphe(np.array([phi, theta])) : unit vector of photon momentum in spherical coordinate
-        n0 (float) : refractive index of ice
-        r0 (float) : DOM radius(pressure vessel)
-        d0 (float) : thickness of pressue vessel
-        n1 (float) : refractive index of pressure vessel
-        n2 (float) : refractiev index of air(inside of vessel)
-    
+        dom (DOM) : dom class includes optical properties
+        ice (Ice) : Ice class includes optical properties
+
     Returns:
+        (np.array([phi, theta])) : momentum after refraction
+        (np.array([phi, theta])) : position after refraction
     """
-    
+    # Retrieve parameters
+    r0 = dom.radius
+    d0 = dom.thickness
+    n0 = ice.index
+    n1 = dom.vessel_index
+    n2 = dom.inner_index
+
     r1 = r0 - d0
     photon_pos_cart = sphe_to_cart(photon_pos_sphe)
   
     # step 1 (ice -> vessel)
     s1 = -1 * sphe_to_cart(photon_momentum_sphe)  # inicident angle
-    N = photon_pos_cart
-    s2 = calc_refracted_dir(s1, N, n0, n1)
+    N = photon_pos_cart # Normal vector 
+    s2 = calc_refracted_dir(s1, N, n0, n1) # Refracted angle
 
     # Move from outer boundary to inner boundary inside of vessel 
     # It is just solving simultaneous equations of sphere(inner vessel) and refracted photon track
@@ -269,40 +278,34 @@ def pass_pressure_vessel(photon_pos_sphe, photon_momentum_sphe, n0, r0 = 0.16510
 
 
 def get_total_hist2d(file_name, num_files, iterations=0,
-                     x_edges = np.linspace(-np.pi, np.pi, 100), 
-                     y_edges = np.linspace(0, np.pi, 100),
-                     bins = [],
-                     r0 = 0.16510, #[m]
-                     d0 = 0.0127, #[m]
-                     wv = 405, 
-                     camera_pos_sphe = np.array([0, np.pi/2]), 
-                     camera_lens_rad = 0.005,
-                     camera_distance = 0.02,
-                     FOV = 120,
-                     filter_lens = True,
-                     show_position = False, 
-                     print_num = False,
-                     use_stored_data = False,
-                     src_raw_dir = "../dats/",
-                     src_stored_dir = ""):
+                    dom = DOM(radius=0.16510, thickness=0.0127, vessel_index=1.47, inner_index=1, pos_diff=[30,0,0]), 
+                    camera = Camera(pos_sphe=[0, np.pi/2], pos_distance=0.02, lens_rad=0.005, FOV=90),
+                    ice = Ice(sca_length=42.53, abs_length=147.811, index=refractive_index_ice(405)),
+                    bins = [],
+                    x_edges = np.linspace(-np.pi, np.pi, 100), 
+                    y_edges = np.linspace(0, np.pi, 100),
+                    filter_lens = True,
+                    show_position = False, 
+                    print_num = False,
+                    use_stored_data = False,
+                    src_raw_dir = "../dats/",
+                    src_stored_dir = ""):
+
     """Because the large photon data like more than 10^12 is stored in separately. So, we need to merge splitted data.
     It will be used for the purpose of comparing histogram.
     
     Args:
         file_name(str) : name of the first file
         num_files(int) : how much file exist or  will be read
+        dom (DOM) : optical information of DOM
+        camera (Camera) : camera geometrical condition
+        ice (Ice) : ice property like refraction index
+        bins(int) : number of bins for the histogram
         x_edges (np.array([phi])) : bins of phi for histogram
         y_edges (np.array([theta])) : bins of theta for histogram
-        bins(int) : number of bins for the histogram
-        r0(float) : DOM radius
-        d0(float) : Vessel thickness
-        wv(float) : wavelength of the photon from the LED [nm]
-        camera_pos_sphe(np.array([phi, theta])) : camera position vector from the center of DOM
-        camera_lens_rad(float) : radius of camera lens
         filter_lens(bool) : If it is true, calculate histogram for photons which are on the lens. Otherwise just collect all momentum info
         use_stored_data(bool) : Due to large computational cost and storage, we can calculate refraction first and use that. It is usually stored in the
                             directory "refraction/" inside of src_dir. 
-                            
                             The format is momentum(phi, theta), position(phi, theta)    
 
     Returns:
@@ -314,7 +317,15 @@ def get_total_hist2d(file_name, num_files, iterations=0,
     H = []
     momentum = []
     position = []
-    ice_index = refractive_index_ice(wv)
+
+    r0 = dom.radius
+    d0 = dom.thickness
+    camera_pos_sphe = camera.pos_sphe
+    camera_distance = camera.pos_distance
+    camera_lens_rad = camera.lens_rad
+    ice_index = ice.index
+    FOV = camera.FOV
+
     for i in range(num_files):
         if use_stored_data:
             # Use precalculated refraction data
@@ -354,7 +365,7 @@ def get_total_hist2d(file_name, num_files, iterations=0,
         # Apply the filter
         momentum = momentum[refracted_filter]
         position = position[refracted_filter]
-        # print(momentum)
+
         if print_num:
             print('%dth file : %d photon arrive in lens' %(i+1, len(momentum)))
 
@@ -362,7 +373,6 @@ def get_total_hist2d(file_name, num_files, iterations=0,
             data = momentum
         else:
             data = position
-
 
         # Put the data into histogram
         if isinstance(bins, int):
@@ -382,6 +392,7 @@ def get_total_hist2d(file_name, num_files, iterations=0,
             H += H0
     if print_num:
         print('The number of total photon on the lens : %d' %(np.sum(H)))
+        
     return H, x_edges, y_edges
 
 
